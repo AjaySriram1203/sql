@@ -1,0 +1,80 @@
+/* In this project, I have explored some basic statistics about IPL 2019 and I have tried to answer one question in particular: 
+'Do batsmen struggle against balls that spin away as compared to balls spinning into them? '
+This notion has been the reason for many bowling changes and even in team selection in recent matches and is talked about a lot.
+*/
+
+SELECT count(*)
+From `my-project1-313706.IPL.Deliveries`;
+--this table contains ball by ball data of every IPL 2019 match. The data has been limited to only 2019 due to size constraint to upload files in Google BigQuery.
+
+SELECT count(*)
+From `my-project1-313706.IPL.Players`;
+--this table has data about player's name, country, DOB
+
+--max runs in each match
+with f as (select max(score) as hs,match_id
+from(select sum(batsman_runs) as score,match_id,batsman
+from `my-project1-313706.IPL.Deliveries` 
+group by match_id,batsman)
+group by match_id)
+select batsman,batting_team,f.hs,f.match_id
+from `my-project1-313706.IPL.Deliveries` as d
+JOIN f on d.match_id=f.match_id
+group by batsman,batting_team,f.hs,f.match_id 
+having sum(batsman_runs)=f.hs
+order by f.hs desc,match_id;
+
+--max wickets in each match
+with f as (select max(dis) as hs,match_id
+from(select count(dismissal_kind) as dis,match_id,bowler
+from `my-project1-313706.IPL.Deliveries` 
+where dismissal_kind not in ('run out','retired hurt','obstructing the field')
+group by match_id,bowler)
+group by match_id)
+select bowler,bowling_team,f.hs,f.match_id
+from `my-project1-313706.IPL.Deliveries` as d
+JOIN f on d.match_id=f.match_id
+group by bowler,bowling_team,f.hs,f.match_id 
+having count(dismissal_kind)=f.hs
+order by f.hs desc,match_id;
+
+
+--purple cap list
+select bowler as Name, bowling_team as Team,count(dismissal_kind not in ('run out','retired hurt','obstructing the field')) as wickets
+from `my-project1-313706.IPL.Deliveries` 
+group by bowler,bowling_team
+order by wickets desc 
+Limit 10;
+
+--orange cap list
+select batsman as Name, batting_team as Team,sum(batsman_runs) as Runs, countif(batsman_runs=4) as Fours,countif(batsman_runs=6) as Sixers,(4*countif(batsman_runs=4)+6*countif(batsman_runs=6)) as Runs_In_Boundries
+from `my-project1-313706.IPL.Deliveries` 
+group by batsman,batting_team
+order by Runs desc 
+Limit 10;
+
+--age of players with most dot ball percentage
+with s as( 
+select batsman, p.DOB,(countif(batsman_runs=0)/count(batsman))*100 as dbp,(sum(batsman_runs)/count(batsman))*100 as stk_rate, p.Country, batting_team
+from `my-project1-313706.IPL.Deliveries` as d
+left join `my-project1-313706.IPL.Players` p on d.batsman=p.Player_Name   
+group by batsman, p.DOB, p.Country,batting_team
+HAVING count(batsman)>100 and stk_rate<130
+order by dbp desc
+LIMIT 20)
+select count(*),countif(DOB<cast('1990-01-01' as date)) as Older, (countif(DOB>=cast('1990-01-01'as date))) as Young
+from s;
+
+select sum(batsman_runs) as runs,countif(d.dismissal_kind not in ('run out','retired hurt','obstructing the field')) as wickets,count(ball) as Balls,(sum(batsman_runs)/count(dismissal_kind not in ('run out','retired hurt','obstructing the field'))) as average,count(ball)/count(dismissal_kind not in ('run out','retired hurt','obstructing the field')) as Bowler_Strike_Rate,(sum(batsman_runs)/count(ball))*100 as Batsman_Strike_Rate,(sum(batsman_runs+wide_runs+noball_runs)/count(ball))*6 as Economy_Rate,
+case when p.Batting_Hand='Left_Hand' and (p.Bowling_Skill='Slow left-arm orthodox' or p.Bowling_Skill='Legbreak') then 'Left, Turn in'
+when p.Batting_Hand='Right_Hand' and (p.Bowling_Skill='Right-arm offbreak' or p.Bowling_Skill='Slow left-arm chinaman') then 'Right, Turn in'
+when p.Batting_Hand='Left_Hand' and (p.Bowling_Skill='Right-arm offbreak' or p.Bowling_Skill='Slow left-arm chinaman') then 'Left, Turn away'
+when p.Batting_Hand='Right_Hand' and (p.Bowling_Skill='Slow left-arm orthodox' or p.Bowling_Skill='Legbreak') then 'Right, Turn away'
+else 'Other'
+end as combination
+from `my-project1-313706.IPL.Deliveries` as d
+join `my-project1-313706.IPL.Players` as p on p.Player_Name=d.batsman
+join `my-project1-313706.IPL.Players` as p2 on p2.Player_Name=d.bowler
+group by combination
+order by combination;
+
