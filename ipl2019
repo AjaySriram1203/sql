@@ -23,6 +23,7 @@ JOIN f on d.match_id=f.match_id
 group by batsman,batting_team,f.hs,f.match_id 
 having sum(batsman_runs)=f.hs
 order by f.hs desc,match_id;
+--the highest individual score has been by Jonny Bairstow,followed by Rahane and Samson.
 
 --max wickets in each match
 with f as (select max(dis) as hs,match_id
@@ -37,14 +38,16 @@ JOIN f on d.match_id=f.match_id
 group by bowler,bowling_team,f.hs,f.match_id 
 having count(dismissal_kind)=f.hs
 order by f.hs desc,match_id;
-
+--Alzarri Joseph of Mumbai Indians has taken 6 wickets in an innings which is the most in an innings in IPL 2019. 
+--There are 10 players with 4 wicket hauls following him in the list.
 
 --purple cap list
-select bowler as Name, bowling_team as Team,count(dismissal_kind not in ('run out','retired hurt','obstructing the field')) as wickets
+select bowler as Name, bowling_team as Team,countif(dismissal_kind not in ('run out','retired hurt','obstructing the field')) as wickets
 from `my-project1-313706.IPL.Deliveries` 
 group by bowler,bowling_team
 order by wickets desc 
 Limit 10;
+--purple cap holder is Imran Tahir with 26 wickets and second in the list is K Rabada with 25.
 
 --orange cap list
 select batsman as Name, batting_team as Team,sum(batsman_runs) as Runs, countif(batsman_runs=4) as Fours,countif(batsman_runs=6) as Sixers,(4*countif(batsman_runs=4)+6*countif(batsman_runs=6)) as Runs_In_Boundries
@@ -52,6 +55,7 @@ from `my-project1-313706.IPL.Deliveries`
 group by batsman,batting_team
 order by Runs desc 
 Limit 10;
+--orange cap holder is David Warner. Another noticeable thing is the presence of 5 left handers in the top 7 run getters.
 
 --age of players with most dot ball percentage
 with s as( 
@@ -64,7 +68,22 @@ order by dbp desc
 LIMIT 20)
 select count(*),countif(DOB<cast('1990-01-01' as date)) as Older, (countif(DOB>=cast('1990-01-01'as date))) as Young
 from s;
+--There have been a total of 18 players who have played more than 100 balls with a strike rate of less than 130.
+--8 of them are aged 30 and above. 6 players are below 30. DOB info of 4 of these players are missing.
+--highest dot ball % by a player is 46.5%. There are 5 CSK players in the top 10 on this list.
+--Contrary to the orange cap list, there are only 4 Left Handed Batsmen in this list. It seems Left Handed batsmen have done well in IPL 2019.
 
+--Left Hand Batsmen vs Right Hand Batsmen
+select p.Batting_Hand,count(distinct batsman) as Number_of_Players,sum(batsman_runs) as runs,countif(d.dismissal_kind not in ('run out','retired hurt','obstructing the field')) as wickets,count(ball) as Balls,(sum(batsman_runs)/countif(dismissal_kind not in ('run out','retired hurt','obstructing the field'))) as average,count(ball)/countif(dismissal_kind not in ('run out','retired hurt','obstructing the field')) as Bowler_Strike_Rate,(sum(batsman_runs)/count(ball))*100 as Batsman_Strike_Rate,(sum(batsman_runs+wide_runs+noball_runs)/count(ball))*6 as Economy_Rate
+from `my-project1-313706.IPL.Deliveries` as d
+join `my-project1-313706.IPL.Players` as p on p.Player_Name=d.batsman
+group by p.Batting_Hand
+order by p.Batting_Hand;
+/*Right Hand batsmen have a marginally better average while playing with a slightly slower strike rate as compared to lefties.
+There are 105 Right handed batsmen and only 39 left handed batsmen.
+Right Hand batsmen have scored nearly 23rd of total runs*/
+
+--batsmen statistics vs ball turning in and away
 select sum(batsman_runs) as runs,countif(d.dismissal_kind not in ('run out','retired hurt','obstructing the field')) as wickets,count(ball) as Balls,(sum(batsman_runs)/count(dismissal_kind not in ('run out','retired hurt','obstructing the field'))) as average,count(ball)/count(dismissal_kind not in ('run out','retired hurt','obstructing the field')) as Bowler_Strike_Rate,(sum(batsman_runs)/count(ball))*100 as Batsman_Strike_Rate,(sum(batsman_runs+wide_runs+noball_runs)/count(ball))*6 as Economy_Rate,
 case when p.Batting_Hand='Left_Hand' and (p.Bowling_Skill='Slow left-arm orthodox' or p.Bowling_Skill='Legbreak') then 'Left, Turn in'
 when p.Batting_Hand='Right_Hand' and (p.Bowling_Skill='Right-arm offbreak' or p.Bowling_Skill='Slow left-arm chinaman') then 'Right, Turn in'
@@ -77,27 +96,24 @@ join `my-project1-313706.IPL.Players` as p on p.Player_Name=d.batsman
 join `my-project1-313706.IPL.Players` as p2 on p2.Player_Name=d.bowler
 group by combination
 order by combination;
+/* The effect of the the theory 'batsmen struggle against balls turning away' can be seen immediately in the number of balls faced by batsmen.
+Of the approximately 6000 balls bowled by spinners, batsmen have played around 3500 balls spinning away and around 2500 spinning into them.
 
---running wickets total
-select (sum(s) over (partition by match_id,inning order by e.match_id,e.inning,e.over,e.ball)) as wickets_fell, e.match_id ,e.inning,e.over,e.ball
-from (select count(dismissal_kind) as s,match_id ,inning,d.over,ball from `my-project1-313706.IPL.Deliveries` as d group by match_id ,inning,d.over,ball
-) as e
-group by match_id ,inning,e.over,ball,s
-order by match_id ,inning,e.over,ball,s;
+The numbers do not support the theory. 
+Batsmen have a higher strike rate and average when the ball is turning away.
+Bowlers who turn the ball into the batsmen have a better economy.
+Right arm off spinners and left arm chinaman bowlers:
+  When bowling to right hand batsmen(ball turns in):Economy:7.12 and Strike Rate:17.58 i.e a wicket every 3 overs(best figures for bowlers in the table)
+  when bowling to left hand batsmen(ball turns away): Batsman Average:33.25(2nd Best,highest-33.87) batsman Strike Rate:144.1 (Best in the table)
+Despite bowling about 1000 balls less, bowlers who turn the ball into the batsmen have taken only 21 wickets less compared bowlers turning away.
+Left hand batsmen against spinners: very close batting average and bowler strike rates. However the batsmen have scored at a faster rate against balls turning away. 
+Right Hand Batsmen on average score 10 runs more against bowlers turning away.
 
---comparing the statistics of top and middle order batsman
-select sum(batsman_runs) as runs,countif(d.dismissal_kind not in ('run out','retired hurt','obstructing the field')) as wickets,count(d.ball) as Balls,(sum(batsman_runs)/count(dismissal_kind not in ('run out','retired hurt','obstructing the field'))) as average,count(d.ball)/count(dismissal_kind not in ('run out','retired hurt','obstructing the field')) as Bowler_Strike_Rate,(sum(batsman_runs)/count(d.ball))*100 as Batsman_Strike_Rate,(sum(batsman_runs+wide_runs+noball_runs)/count(d.ball))*6 as Economy_Rate,
-case when p.Batting_Hand='Left_Hand' and (p.Bowling_Skill='Slow left-arm orthodox' or p.Bowling_Skill='Legbreak') then 'Left, Turn in'
-when p.Batting_Hand='Right_Hand' and (p.Bowling_Skill='Right-arm offbreak' or p.Bowling_Skill='Slow left-arm chinaman') then 'Right, Turn in'
-when p.Batting_Hand='Left_Hand' and (p.Bowling_Skill='Right-arm offbreak' or p.Bowling_Skill='Slow left-arm chinaman') then 'Left, Turn away'
-when p.Batting_Hand='Right_Hand' and (p.Bowling_Skill='Slow left-arm orthodox' or p.Bowling_Skill='Legbreak') then 'Right, Turn away'
-else 'Other'
-end as combination
-from `my-project1-313706.IPL.Deliveries` as d
-join `my-project1-313706.IPL.wickets_fell` as w on (w.match_id=d.match_id) and (w.inning=d.inning) and (w.over=d.over) and (w.ball=d.ball)
-join `my-project1-313706.IPL.Players` as p on p.Player_Name=d.batsman
-join `my-project1-313706.IPL.Players` as p2 on p2.Player_Name=d.bowler
-where wickets_fell<6
-group by combination
-order by combination;
+The numbers clearly are not in favor of the theory when considering IPL2019. 
+
+Other things to be noted are: Right hand batsmen facing medium pacers and fast bowlers account for 45% of all balls and this combination has the best batting average
+Left Handers have scored faster and more runs on average against spinners as compared to right handers
+Right handers have better numbers than left handers against medium pace and fast bowlers in IPL 2019*/
+
+
 
